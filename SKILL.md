@@ -14,11 +14,8 @@ not need to be on a trusted network path.
 ## Base URL
 
 ```
-<DEPLOYED_URL>
+https://vulnscope-production-3986.up.railway.app
 ```
-
-Replace `<DEPLOYED_URL>` with your deployed instance URL (e.g.
-`https://vulnscope.up.railway.app`) after deployment.
 
 ---
 
@@ -74,7 +71,7 @@ Evaluate one or more packages for vulnerability risk.
 
 **Sample request — known DENIED case**
 ```
-GET <DEPLOYED_URL>/v1/evaluate?packages=pyyaml==5.3.1&ecosystem=PyPI
+GET https://vulnscope-production-3986.up.railway.app/v1/evaluate?packages=pyyaml==5.3.1&ecosystem=PyPI
 ```
 
 **Sample response — DENIED**
@@ -130,7 +127,7 @@ GET <DEPLOYED_URL>/v1/evaluate?packages=pyyaml==5.3.1&ecosystem=PyPI
 
 **Sample request — known APPROVED case**
 ```
-GET <DEPLOYED_URL>/v1/evaluate?packages=requests&ecosystem=PyPI
+GET https://vulnscope-production-3986.up.railway.app/v1/evaluate?packages=requests&ecosystem=PyPI
 ```
 
 **Sample response — APPROVED** (abbreviated)

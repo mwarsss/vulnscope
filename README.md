@@ -94,7 +94,7 @@ curl http://localhost:8000/v1/pubkey
 
 ```json
 {
-  "public_key_hex": "a1b2c3…",
+  "public_key_hex": "34a439c53b1b61ef…",
   "curve": "Ed25519"
 }
 ```
@@ -151,8 +151,8 @@ curl -s "http://localhost:8000/v1/evaluate?packages=requests,flask&ecosystem=PyP
   "payload": {
     "verdict": "DENIED",
     "ecosystem": "PyPI",
-    "queried_at": "2024-01-01T12:00:00+00:00",
-    "public_key_hex": "a1b2c3…",
+    "queried_at": "2026-07-08T17:55:35.011054+00:00",
+    "public_key_hex": "34a439c53b1b61ef…",
     "thresholds": {
       "epss_deny_percentile": 0.9,
       "severity_deny_set": ["CRITICAL", "HIGH"]
@@ -164,35 +164,35 @@ curl -s "http://localhost:8000/v1/evaluate?packages=requests,flask&ecosystem=PyP
         "ecosystem": "PyPI",
         "verdict": "DENIED",
         "reasons": [
-          "EPSS percentile 0.9780 exceeds threshold 0.9 (CVEs: ['CVE-2020-14343'])"
+          "EPSS percentile 0.9244 exceeds threshold 0.9 (CVEs: ['CVE-2020-14343'])"
         ],
         "vulnerabilities": [
           {
-            "id": "GHSA-6757-jp84-gxfx",
+            "id": "GHSA-8q59-q68h-6hv4",
             "aliases": ["CVE-2020-14343"],
-            "summary": "Arbitrary code execution in PyYAML",
+            "summary": "Improper Input Validation in PyYAML",
             "severity": "CRITICAL",
             "has_fixed_version": true,
             "epss": [
               {
                 "cve": "CVE-2020-14343",
-                "percentile": 0.9780,
-                "epss_score": 0.71671,
-                "date": "2024-01-01"
+                "percentile": 0.92436,
+                "epss_score": 0.05984,
+                "date": "2026-07-08"
               }
             ]
           }
         ],
         "github": {
           "url": "https://github.com/yaml/pyyaml",
-          "stars": 2100,
-          "open_issues": 87,
-          "last_commit": "2024-01-01T10:00:00Z"
+          "stars": 2910,
+          "open_issues": 350,
+          "last_commit": "2026-06-17T22:15:29Z"
         }
       }
     ]
   },
-  "signature": "base64url…"
+  "signature": "ospIIkJE+R6KxzDJWQ8bwBN/r+BBoQetq3D25V93/aOekiyVNDPJZV21TTvJfDcpuMcNDkgsgBf/ERhHpQ58BA=="
 }
 ```
 
@@ -215,10 +215,10 @@ python3 verify_signature.py resp_denied.json "$PUB"
 Output on success:
 ```
 ✓  Signature VALID  |  Overall verdict: ✗ DENIED
-   Signed at : 2024-01-01T12:00:00+00:00
-   Public key: a1b2c3d4e5f6…
+   Signed at : 2026-07-08T17:55:35.011054+00:00
+   Public key: 34a439c53b1b61ef…
    pyyaml==5.3.1  →  ✗ DENIED
-       reason: EPSS percentile 0.9780 exceeds threshold 0.9 ...
+       reason: EPSS percentile 0.9244 exceeds threshold 0.9 (CVEs: ['CVE-2020-14343'])
 ```
 
 ---

@@ -135,7 +135,7 @@ GET /v1/pubkey
 **Response**
 ```json
 {
-  "public_key_hex": "a1b2c3d4e5f6…64-hex-chars…",
+  "public_key_hex": "34a439c53b1b61ef…",
   "curve": "Ed25519"
 }
 ```
@@ -164,8 +164,8 @@ GET https://vulnscope-production-3986.up.railway.app/v1/evaluate?packages=pyyaml
   "payload": {
     "verdict": "DENIED",
     "ecosystem": "PyPI",
-    "queried_at": "2024-06-01T12:00:00+00:00",
-    "public_key_hex": "a1b2c3…",
+    "queried_at": "2026-07-08T17:55:35.011054+00:00",
+    "public_key_hex": "34a439c53b1b61ef…",
     "thresholds": {
       "epss_deny_percentile": 0.9,
       "severity_deny_set": ["CRITICAL", "HIGH"]
@@ -177,35 +177,50 @@ GET https://vulnscope-production-3986.up.railway.app/v1/evaluate?packages=pyyaml
         "ecosystem": "PyPI",
         "verdict": "DENIED",
         "reasons": [
-          "EPSS percentile 0.9780 exceeds threshold 0.9 (CVEs: ['CVE-2020-14343'])"
+          "EPSS percentile 0.9244 exceeds threshold 0.9 (CVEs: ['CVE-2020-14343'])"
         ],
         "vulnerabilities": [
           {
-            "id": "GHSA-6757-jp84-gxfx",
+            "id": "GHSA-8q59-q68h-6hv4",
             "aliases": ["CVE-2020-14343"],
-            "summary": "Arbitrary code execution in PyYAML",
+            "summary": "Improper Input Validation in PyYAML",
             "severity": "CRITICAL",
             "has_fixed_version": true,
             "epss": [
               {
                 "cve": "CVE-2020-14343",
-                "percentile": 0.9780,
-                "epss_score": 0.71671,
-                "date": "2024-06-01"
+                "percentile": 0.92436,
+                "epss_score": 0.05984,
+                "date": "2026-07-08"
+              }
+            ]
+          },
+          {
+            "id": "PYSEC-2021-142",
+            "aliases": ["CVE-2020-14343"],
+            "summary": "",
+            "severity": "UNKNOWN",
+            "has_fixed_version": true,
+            "epss": [
+              {
+                "cve": "CVE-2020-14343",
+                "percentile": 0.92436,
+                "epss_score": 0.05984,
+                "date": "2026-07-08"
               }
             ]
           }
         ],
         "github": {
           "url": "https://github.com/yaml/pyyaml",
-          "stars": 2100,
-          "open_issues": 87,
-          "last_commit": "2024-05-15T10:00:00Z"
+          "stars": 2910,
+          "open_issues": 350,
+          "last_commit": "2026-06-17T22:15:29Z"
         }
       }
     ]
   },
-  "signature": "base64-encoded-ed25519-signature…"
+  "signature": "ospIIkJE+R6KxzDJWQ8bwBN/r+BBoQetq3D25V93/aOekiyVNDPJZV21TTvJfDcpuMcNDkgsgBf/ERhHpQ58BA=="
 }
 ```
 
@@ -214,24 +229,82 @@ GET https://vulnscope-production-3986.up.railway.app/v1/evaluate?packages=pyyaml
 GET https://vulnscope-production-3986.up.railway.app/v1/evaluate?packages=requests==2.32.3&ecosystem=PyPI
 ```
 
-**Sample response — APPROVED** (abbreviated)
+**Sample response — APPROVED**
 ```json
 {
   "payload": {
     "verdict": "APPROVED",
+    "ecosystem": "PyPI",
+    "queried_at": "2026-07-08T17:55:36.450165+00:00",
+    "public_key_hex": "34a439c53b1b61ef…",
+    "thresholds": {
+      "epss_deny_percentile": 0.9,
+      "severity_deny_set": ["CRITICAL", "HIGH"]
+    },
     "packages": [
       {
         "name": "requests",
         "version": "2.32.3",
+        "ecosystem": "PyPI",
         "verdict": "APPROVED",
         "reasons": [],
-        "vulnerabilities": []
+        "vulnerabilities": [
+          {
+            "id": "GHSA-9hjg-9r4m-mvj7",
+            "aliases": ["CVE-2024-47081"],
+            "summary": "Requests vulnerable to .netrc credentials leak via malicious URLs",
+            "severity": "MEDIUM",
+            "has_fixed_version": true,
+            "epss": [
+              {
+                "cve": "CVE-2024-47081",
+                "percentile": 0.53646,
+                "epss_score": 0.00846,
+                "date": "2026-07-08"
+              }
+            ]
+          },
+          {
+            "id": "GHSA-gc5v-m9x4-r6x2",
+            "aliases": ["CVE-2026-25645"],
+            "summary": "Requests has Insecure Temp File Reuse in its extract_zipped_paths() utility function",
+            "severity": "MEDIUM",
+            "has_fixed_version": true,
+            "epss": [
+              {
+                "cve": "CVE-2026-25645",
+                "percentile": 0.07977,
+                "epss_score": 0.00182,
+                "date": "2026-07-08"
+              }
+            ]
+          },
+          {
+            "id": "PYSEC-2026-1872",
+            "aliases": ["CVE-2024-47081"],
+            "summary": "Requests vulnerable to .netrc credentials leak via malicious URLs",
+            "severity": "MEDIUM",
+            "has_fixed_version": true,
+            "epss": [
+              {
+                "cve": "CVE-2024-47081",
+                "percentile": 0.53646,
+                "epss_score": 0.00846,
+                "date": "2026-07-08"
+              }
+            ]
+          }
+        ],
+        "github": {
+          "url": "https://github.com/psf/requests",
+          "stars": 54114,
+          "open_issues": 232,
+          "last_commit": "2026-07-06T17:32:29Z"
+        }
       }
-    ],
-    "queried_at": "2024-06-01T12:00:00+00:00",
-    "public_key_hex": "a1b2c3…"
+    ]
   },
-  "signature": "base64…"
+  "signature": "gMwDWathguGv1x8mvt27p9ARE25JiA/a8aMrTE0mo8h/mWk1jXD6rH7ZD4DmNhqWx9kjSgiOU28SmM9RqHdECg=="
 }
 ```
 
@@ -252,6 +325,11 @@ Per-package decision.  The top-level `payload.verdict` is `DENIED` if any
 single package in the batch is denied.  Always check the per-package verdict to
 identify which specific packages triggered the denial.
 
+**Multi-package transactions:** If any package in a batch is DENIED, treat the
+entire installation transaction as blocked.  Do not proceed with installing any
+package from the batch — even those that were individually APPROVED — until the
+human approves or the denied package is removed from the request.
+
 ### `packages[].reasons`
 
 Human-readable list of the specific denial triggers.  Present and non-empty only
@@ -264,7 +342,11 @@ override decision.
 1. **Do not install the package.**
 2. Surface the `reasons` array and the `vulnerabilities` array to the human.
 3. If the human decides to override, they should do so explicitly (not the agent unilaterally).
-4. Consider whether a different version or alternative package is available.
+4. **Do not automatically try a different version or substitute an alternative package.**
+   You may inform the human that alternatives may exist, but wait for explicit human
+   instruction before attempting any alternative dependency.
+5. If the batch contained other packages that were APPROVED, do not install those
+   either — the entire transaction is blocked until the human resolves the denial.
 
 ### `packages[].vulnerabilities[].epss`
 
@@ -275,7 +357,7 @@ EPSS fields:
 | `epss_score`   | Raw probability (0–1) that the CVE is exploited in the wild in the next 30 days. |
 | `percentile`   | Fraction of all scored CVEs this CVE ranks above.  **This is what the threshold applies to.** |
 
-A percentile of `0.978` means this CVE is more actively exploited than 97.8% of
+A percentile of `0.924` means this CVE is more actively exploited than 92.4% of
 all CVEs in the EPSS dataset — a strong signal to block.
 
 ---

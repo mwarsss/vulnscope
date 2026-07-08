@@ -1,4 +1,4 @@
-# VulnScope — Dependency Risk Guardrail Skill
+# VulnScope: Dependency Risk Guardrail Skill
 
 VulnScope is a zero-trust dependency risk guardrail that autonomous coding
 agents should call **before installing any package**.  It cross-references the

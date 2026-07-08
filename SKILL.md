@@ -325,10 +325,14 @@ Per-package decision.  The top-level `payload.verdict` is `DENIED` if any
 single package in the batch is denied.  Always check the per-package verdict to
 identify which specific packages triggered the denial.
 
-**Multi-package transactions:** If any package in a batch is DENIED, treat the
-entire installation transaction as blocked.  Do not proceed with installing any
-package from the batch — even those that were individually APPROVED — until the
-human approves or the denied package is removed from the request.
+**Multi-package transactions:** The server always returns full data (verdict,
+reasons, vulnerabilities) for every package in the batch independently — an
+APPROVED package's data is never withheld just because another package in the
+same batch is DENIED.  However, if `payload.verdict` is `"DENIED"`, the agent
+**must not** proceed with installing **any** package from that batch, including
+ones individually marked `APPROVED`, until a human reviews the DENIED
+package(s) and explicitly approves proceeding.  This is an enforcement rule for
+the calling agent, not a behaviour enforced by the API itself.
 
 ### `packages[].reasons`
 
@@ -345,8 +349,10 @@ override decision.
 4. **Do not automatically try a different version or substitute an alternative package.**
    You may inform the human that alternatives may exist, but wait for explicit human
    instruction before attempting any alternative dependency.
-5. If the batch contained other packages that were APPROVED, do not install those
-   either — the entire transaction is blocked until the human resolves the denial.
+5. The server will have returned full data for every package in the batch,
+   including any that were individually `APPROVED`.  Do not install those
+   either — the agent must treat the entire batch as blocked until the human
+   explicitly approves proceeding.  The API does not enforce this; the agent does.
 
 ### `packages[].vulnerabilities[].epss`
 

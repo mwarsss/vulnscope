@@ -11,6 +11,90 @@ not need to be on a trusted network path.
 
 ---
 
+## When to Use This Skill
+
+Call VulnScope **before** running any package installation command.  This
+includes, but is not limited to:
+
+| Ecosystem | Package managers |
+|-----------|-----------------|
+| PyPI      | `pip install`, `uv add`, `poetry add`, `pip-compile` |
+| npm       | `npm install`, `pnpm add`, `yarn add` |
+
+**Rules:**
+
+1. **Always call before installing** — not after.  The purpose of VulnScope is
+   to gate the installation decision.  Calling it on a package that is already
+   installed serves no operational purpose.
+2. **Call for every install** — even packages you consider well-known.  EPSS
+   scores and vulnerability disclosures change daily.
+3. **Pin versions when possible** — include the exact version you intend to
+   install (e.g. `requests==2.32.3`, `lodash@4.17.20`).  An unpinned query
+   returns historical CVEs across all versions of the package, which can produce
+   false DENIED verdicts for old, patched vulns.
+4. **Batch packages in one call** — if you need to install multiple packages at
+   once, pass them all as a comma-separated list in a single `/v1/evaluate`
+   request rather than making one request per package.
+5. **If DENIED, stop and escalate** — do not install the package, do not
+   silently retry with a different version, and do not bypass the check.  Surface
+   the denial reasons to the human and wait for explicit human approval.
+
+---
+
+## Typical Agent Workflow
+
+Follow these steps every time you need to install one or more packages:
+
+```
+1. Determine the package(s) and version(s) to install.
+   └─ Pin versions where possible (== for PyPI, @ for npm).
+
+2. Fetch /v1/pubkey if not already cached for this session.
+   └─ Cache the public_key_hex — it is stable across requests until the
+      service restarts without PRIVATE_KEY_SEED.
+
+3. Call GET /v1/evaluate?packages=<specs>&ecosystem=<PyPI|npm>
+   └─ Set a 10–15 s timeout (VulnScope itself makes upstream calls with
+      5 s timeouts each).
+
+4. Verify the Ed25519 signature on the response.
+   └─ If the signature is INVALID → treat as DENIED, report to the human
+      as a potential integrity issue, and do not install.
+
+5. Read payload.verdict.
+
+   APPROVED ──► Proceed with installation.
+   DENIED   ──► Stop. Do NOT install.
+                Surface packages[].reasons and packages[].vulnerabilities
+                to the human.
+                Wait for explicit human approval before doing anything else.
+```
+
+**Do not skip step 4.**  Verifying the signature is what makes the zero-trust
+model work — it proves the response was issued by VulnScope and has not been
+modified in transit.
+
+---
+
+## When Not to Call This Skill
+
+Do **not** call VulnScope for any of the following:
+
+- **Removing packages** — `pip uninstall`, `npm uninstall`, etc.
+- **Listing installed packages** — `pip list`, `npm ls`, etc.
+- **Importing or using an already-installed package** — VulnScope gates
+  installation decisions, not runtime usage.
+- **Private or internal packages** — VulnScope queries OSV.dev and public
+  registries (PyPI, npm).  Packages not published there will return no
+  vulnerability data, making the verdict meaningless.
+- **Unsupported ecosystems** — currently only `PyPI` and `npm` are supported.
+  Do not call VulnScope for Cargo, Maven, Go modules, RubyGems, etc.
+- **Operations unrelated to dependency installation** — file operations, API
+  calls, code generation, test execution, and similar tasks do not require a
+  VulnScope check.
+
+---
+
 ## Base URL
 
 ```
@@ -127,7 +211,7 @@ GET https://vulnscope-production-3986.up.railway.app/v1/evaluate?packages=pyyaml
 
 **Sample request — known APPROVED case**
 ```
-GET https://vulnscope-production-3986.up.railway.app/v1/evaluate?packages=requests&ecosystem=PyPI
+GET https://vulnscope-production-3986.up.railway.app/v1/evaluate?packages=requests==2.32.3&ecosystem=PyPI
 ```
 
 **Sample response — APPROVED** (abbreviated)
@@ -138,7 +222,7 @@ GET https://vulnscope-production-3986.up.railway.app/v1/evaluate?packages=reques
     "packages": [
       {
         "name": "requests",
-        "version": null,
+        "version": "2.32.3",
         "verdict": "APPROVED",
         "reasons": [],
         "vulnerabilities": []
@@ -153,18 +237,20 @@ GET https://vulnscope-production-3986.up.railway.app/v1/evaluate?packages=reques
 
 ---
 
-## How to interpret the response
+## How to Interpret the Response
 
 ### `payload.verdict`
 
 | Value      | Meaning |
 |------------|---------|
-| `APPROVED` | No denial criterion was triggered.  The package is safe to install based on OSV/EPSS data at query time.  Findings and warnings may still be present in `vulnerabilities`. |
-| `DENIED`   | At least one criterion was triggered (see `packages[].reasons`).  **Do not install.  Surface the reasons to the human supervisor.** |
+| `APPROVED` | No denial criterion was triggered based on OSV and EPSS data available at query time.  **This is not a guarantee that the package is vulnerability-free.**  It means no known CVE met the configured EPSS percentile threshold or the unpatched severity threshold at the moment of the query.  Newly disclosed vulnerabilities, CVEs not yet scored by EPSS, and ecosystem-specific advisories not indexed by OSV may not be captured. |
+| `DENIED`   | At least one criterion was triggered (see `packages[].reasons`).  **Do not install.  Surface the reasons to the human supervisor and wait for explicit approval.** |
 
 ### `packages[].verdict`
 
-Per-package decision.  Overall verdict is `DENIED` if any single package is denied.
+Per-package decision.  The top-level `payload.verdict` is `DENIED` if any
+single package in the batch is denied.  Always check the per-package verdict to
+identify which specific packages triggered the denial.
 
 ### `packages[].reasons`
 
@@ -194,7 +280,27 @@ all CVEs in the EPSS dataset — a strong signal to block.
 
 ---
 
-## Verifying the signature
+## Error Handling
+
+VulnScope makes several upstream calls (OSV.dev, EPSS, GitHub) with individual
+5-second timeouts.  A complete `/v1/evaluate` response may therefore take up to
+approximately 10–15 seconds under load.
+
+| Situation | Action |
+|-----------|--------|
+| Request times out or returns HTTP 5xx | Wait 3 seconds, retry the request once. |
+| Retry also fails | Inform the human that VulnScope is unavailable.  **Do not proceed with installation automatically.**  The human must decide whether to bypass the check. |
+| HTTP 4xx (bad request) | Check the `packages` parameter format (comma-separated specs, `==` for PyPI, `@` for npm).  Fix the request; do not retry the malformed one. |
+| Signature verification fails | Do not install.  Report to the human as a potential integrity issue — the response may have been tampered with in transit. |
+| `payload.verdict` is neither `APPROVED` nor `DENIED` | Treat as an error.  Do not install.  Report the unexpected response to the human. |
+
+**Never bypass the VulnScope check silently.**  If the service is unavailable
+and you cannot reach the human, prefer blocking the installation over proceeding
+without a verdict.
+
+---
+
+## Verifying the Signature
 
 The signature proves VulnScope issued this exact verdict unaltered.  It does
 **not** guarantee the verdict is correct — it reflects OSV/EPSS data at the
@@ -211,7 +317,7 @@ from cryptography.exceptions import InvalidSignature
 def verify_vulnscope_response(response: dict, public_key_hex: str) -> bool:
     """
     Returns True if the signature is valid, False otherwise.
-    
+
     `response`        — parsed JSON from /v1/evaluate
     `public_key_hex`  — hex string from /v1/pubkey (cache this)
     """
@@ -242,11 +348,14 @@ def verify_vulnscope_response(response: dict, public_key_hex: str) -> bool:
 
 ---
 
-## Notes for agents
+## Notes for Agents
 
-- Set a reasonable timeout on calls to `/v1/evaluate` (10–15 s recommended,
-  since VulnScope itself makes several upstream calls with 5 s timeouts each).
+- Set a 10–15 s timeout on calls to `/v1/evaluate` — VulnScope itself makes
+  several upstream calls with 5 s timeouts each, so end-to-end latency varies.
 - Cache `/v1/pubkey` per session or per deployment — it changes only if the
   service restarts without `PRIVATE_KEY_SEED`.
 - CORS is open; browser-based agents may call this endpoint directly.
 - The service does not persist any data about what was queried.
+- A package with `vulnerabilities` present but `verdict = "APPROVED"` means
+  vulnerabilities were found but none met the denial thresholds — the
+  `thresholds` object in the response shows the exact criteria applied.

@@ -530,7 +530,8 @@ async def v1_evaluate(
                 "epss": vuln_epss or None,
             })
 
-        pkg_verdict = "DENIED" if reasons else "APPROVED"
+        deduped_reasons = list(dict.fromkeys(reasons))
+        pkg_verdict = "DENIED" if deduped_reasons else "APPROVED"
         if pkg_verdict == "DENIED":
             overall_verdict = "DENIED"
 
@@ -539,7 +540,7 @@ async def v1_evaluate(
             "version": version,
             "ecosystem": ecosystem,
             "verdict": pkg_verdict,
-            "reasons": reasons,
+            "reasons": deduped_reasons,
             "vulnerabilities": vuln_entries,
             "github": gh_results[i],
         })

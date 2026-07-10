@@ -225,31 +225,28 @@ Output on success:
 
 ## Deployment
 
-### Railway
+### Render (active)
 
-```bash
-npm install -g @railway/cli   # if not already installed
-railway login
-railway init
-railway up
-```
+The live instance runs on Render at `https://vulnscope-0i1c.onrender.com`.
 
-Set environment variables in the Railway dashboard:
+A `render.yaml` is included in the repo root — Render auto-detects it when
+you connect the repo.  Set these two environment variables in the Render
+dashboard (Environment → Secret Files or Environment Variables):
 
 | Variable           | Required | Notes |
 |--------------------|----------|-------|
-| `PRIVATE_KEY_SEED` | **Yes**  | Copy from first-run stdout or generate manually |
-| `GITHUB_TOKEN`     | No       | Increases rate limit to 5 000 req/hr |
+| `PRIVATE_KEY_SEED` | **Yes**  | Paste the existing seed to preserve the public key across deploys |
+| `GITHUB_TOKEN`     | No       | Increases GitHub API rate limit to 5 000 req/hr |
 
-### Render
+### Railway (deprecated — trial expired)
 
-A `render.yaml` is included in the repo.  Connect the repo in the Render
-dashboard, then set `PRIVATE_KEY_SEED` (and optionally `GITHUB_TOKEN`) as
-environment variables marked **secret** in the Render UI.
+The service was originally deployed on Railway but migrated to Render when
+the Railway free trial expired.  Railway deployment instructions are kept
+here for reference only.
 
 ```bash
-# Or deploy via Render CLI
-render deploy
+npm install -g @railway/cli
+railway login && railway init && railway up
 ```
 
 ---

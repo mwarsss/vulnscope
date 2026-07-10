@@ -98,7 +98,7 @@ Do **not** call VulnScope for any of the following:
 ## Base URL
 
 ```
-https://vulnscope-production-3986.up.railway.app
+https://vulnscope-0i1c.onrender.com
 ```
 
 ---
@@ -155,7 +155,7 @@ Evaluate one or more packages for vulnerability risk.
 
 **Sample request — known DENIED case**
 ```
-GET https://vulnscope-production-3986.up.railway.app/v1/evaluate?packages=pyyaml==5.3.1&ecosystem=PyPI
+GET https://vulnscope-0i1c.onrender.com/v1/evaluate?packages=pyyaml==5.3.1&ecosystem=PyPI
 ```
 
 **Sample response — DENIED**
@@ -226,7 +226,7 @@ GET https://vulnscope-production-3986.up.railway.app/v1/evaluate?packages=pyyaml
 
 **Sample request — known APPROVED case**
 ```
-GET https://vulnscope-production-3986.up.railway.app/v1/evaluate?packages=requests==2.32.3&ecosystem=PyPI
+GET https://vulnscope-0i1c.onrender.com/v1/evaluate?packages=requests==2.32.3&ecosystem=PyPI
 ```
 
 **Sample response — APPROVED**

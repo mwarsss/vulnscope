@@ -21,6 +21,13 @@ from datetime import UTC, datetime
 from typing import Any
 
 import httpx
+try:
+    from packaging.version import InvalidVersion as _InvalidPkgVersion
+    from packaging.version import Version as _PkgVersion
+    _HAVE_PACKAGING = True
+except ImportError:
+    _HAVE_PACKAGING = False
+
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.serialization import (
     Encoding,
@@ -258,6 +265,74 @@ def _has_fix(vuln: dict[str, Any]) -> bool:
 
 def _cve_ids(vuln: dict[str, Any]) -> list[str]:
     return [a for a in (vuln.get("aliases") or []) if a.startswith("CVE-")]
+
+
+def _parse_pep440(v: str) -> "_PkgVersion | None":
+    if not _HAVE_PACKAGING:
+        return None
+    try:
+        return _PkgVersion(v)
+    except Exception:
+        return None
+
+
+def _version_in_range(version_str: str, vuln: dict[str, Any], ecosystem: str) -> "bool | None":
+    """True if version_str falls in any ECOSYSTEM affected range; None when undetermined.
+
+    Returns None (rather than False) when packaging is unavailable or the ecosystem
+    is not PyPI, so the caller can fall back to the no-version denial logic.
+    """
+    if not _HAVE_PACKAGING or ecosystem.upper() != "PYPI":
+        return None
+    v = _parse_pep440(version_str)
+    if v is None:
+        return None
+    for aff in vuln.get("affected") or []:
+        # Fast path: OSV explicit versions list
+        if version_str in (aff.get("versions") or []):
+            return True
+        for r in aff.get("ranges") or []:
+            if r.get("type") != "ECOSYSTEM":
+                continue
+            events: list[dict[str, Any]] = r.get("events") or []
+            current_intro: "_PkgVersion | None" = None
+            for ev in events:
+                if "introduced" in ev:
+                    current_intro = _parse_pep440(ev["introduced"]) or _parse_pep440("0")
+                elif "fixed" in ev and current_intro is not None:
+                    fixed_v = _parse_pep440(ev["fixed"])
+                    if fixed_v is not None and current_intro <= v < fixed_v:
+                        return True
+                    current_intro = None
+                elif "last_affected" in ev and current_intro is not None:
+                    last_v = _parse_pep440(ev["last_affected"])
+                    if last_v is not None and current_intro <= v <= last_v:
+                        return True
+                    current_intro = None
+            # Open range: introduced with no following fixed
+            if current_intro is not None and v >= current_intro:
+                return True
+    return False
+
+
+def _first_fix_version(version_str: str, vuln: dict[str, Any], ecosystem: str) -> "str | None":
+    """Smallest fixed version > version_str from any ECOSYSTEM range, or None."""
+    if not _HAVE_PACKAGING or ecosystem.upper() != "PYPI":
+        return None
+    v = _parse_pep440(version_str)
+    if v is None:
+        return None
+    candidates: list[_PkgVersion] = []
+    for aff in vuln.get("affected") or []:
+        for r in aff.get("ranges") or []:
+            if r.get("type") != "ECOSYSTEM":
+                continue
+            for ev in r.get("events") or []:
+                if "fixed" in ev:
+                    fv = _parse_pep440(ev["fixed"])
+                    if fv is not None and fv > v:
+                        candidates.append(fv)
+    return str(min(candidates)) if candidates else None
 
 
 # ╔══════════════════════════════════════════════════════════════════════════════
@@ -510,25 +585,51 @@ async def v1_evaluate(
                     if max_pct is None or p > max_pct:
                         max_pct = p
 
-            # ── Denial criteria ──────────────────────────────────────────────
-            if sev in SEVERITY_DENY_SET and not has_fix:
-                reasons.append(
-                    f"{sev} severity vuln {vid!r} has no fixed version available"
-                )
-            if max_pct is not None and max_pct > EPSS_DENY_PERCENTILE:
-                reasons.append(
-                    f"EPSS percentile {max_pct:.4f} exceeds threshold "
-                    f"{EPSS_DENY_PERCENTILE} (CVEs: {cves})"
-                )
+            # ── Version range check (defense-in-depth; OSV already filters by version) ──
+            in_range: bool | None = _version_in_range(version, d, ecosystem) if version else None
+            # skip_denial=True only when we can *confirm* the queried version is outside the range
+            skip_denial = version is not None and in_range is False
 
-            vuln_entries.append({
+            # ── Denial criteria ──────────────────────────────────────────────
+            if not skip_denial:
+                if version is not None and in_range is True:
+                    # Version confirmed in affected range — deny CRITICAL/HIGH regardless of has_fix,
+                    # because the queried version itself is vulnerable.
+                    if sev in SEVERITY_DENY_SET:
+                        fix_ver = _first_fix_version(version, d, ecosystem)
+                        if fix_ver:
+                            reasons.append(
+                                f"{sev} severity vuln {vid!r} affects version {version!r} "
+                                f"(fix available in {fix_ver!r})"
+                            )
+                        else:
+                            reasons.append(
+                                f"{sev} severity vuln {vid!r} affects version {version!r} "
+                                f"(no fix available)"
+                            )
+                else:
+                    # No version specified, or range undetermined — fall back to global has_fix check.
+                    if sev in SEVERITY_DENY_SET and not has_fix:
+                        reasons.append(
+                            f"{sev} severity vuln {vid!r} has no fixed version available"
+                        )
+                if max_pct is not None and max_pct > EPSS_DENY_PERCENTILE:
+                    reasons.append(
+                        f"EPSS percentile {max_pct:.4f} exceeds threshold "
+                        f"{EPSS_DENY_PERCENTILE} (CVEs: {cves})"
+                    )
+
+            entry: dict[str, Any] = {
                 "id": vid,
                 "aliases": cves,
                 "summary": d.get("summary", ""),
                 "severity": sev,
                 "has_fixed_version": has_fix,
                 "epss": vuln_epss or None,
-            })
+            }
+            if version is not None:
+                entry["in_affected_range"] = in_range
+            vuln_entries.append(entry)
 
         deduped_reasons = list(dict.fromkeys(reasons))
         pkg_verdict = "DENIED" if deduped_reasons else "APPROVED"
@@ -538,6 +639,7 @@ async def v1_evaluate(
         pkg_results.append({
             "name": name,
             "version": version,
+            "version_checked": version is not None,
             "ecosystem": ecosystem,
             "verdict": pkg_verdict,
             "reasons": deduped_reasons,

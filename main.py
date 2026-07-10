@@ -276,24 +276,51 @@ def _parse_pep440(v: str) -> "_PkgVersion | None":
         return None
 
 
-def _version_in_range(version_str: str, vuln: dict[str, Any], ecosystem: str) -> "bool | None":
-    """True if version_str falls in any ECOSYSTEM affected range; None when undetermined.
+# Range type accepted per ecosystem. ECOSYSTEM ranges are PyPI-specific version
+# strings; SEMVER ranges appear on npm advisories and use the same event schema
+# (introduced/fixed/last_affected) but with semver-style version strings.
+# packaging.version.Version handles X.Y.Z correctly for both; exotic npm
+# pre-release notation (e.g. "1.0.0-beta.1") falls back to None → undetermined.
+_ECO_RANGE_TYPE: dict[str, str] = {"PYPI": "ECOSYSTEM", "NPM": "SEMVER"}
 
-    Returns None (rather than False) when packaging is unavailable or the ecosystem
-    is not PyPI, so the caller can fall back to the no-version denial logic.
+
+def _applicable_range_type(ecosystem: str) -> "str | None":
+    """Return the OSV range type that applies to *ecosystem*, or None if unsupported."""
+    return _ECO_RANGE_TYPE.get(ecosystem.upper())
+
+
+def _version_in_range(version_str: str, vuln: dict[str, Any], ecosystem: str) -> "bool | None":
+    """True if version_str falls in an applicable affected range; None when undetermined.
+
+    Returns None (rather than False) when packaging is unavailable, the ecosystem
+    is unsupported, or the advisory carries no range of the applicable type for
+    this ecosystem — so the caller falls back to the no-version denial logic.
+
+    PyPI advisories carry ECOSYSTEM-typed ranges; npm advisories carry
+    SEMVER-typed ranges. Both use identical event schemas (introduced / fixed /
+    last_affected). Mixing range types across ecosystems (e.g. applying a PyPI
+    ECOSYSTEM range to an npm version string) is incorrect and skipped.
     """
-    if not _HAVE_PACKAGING or ecosystem.upper() != "PYPI":
+    if not _HAVE_PACKAGING:
+        return None
+    range_type = _applicable_range_type(ecosystem)
+    if range_type is None:
         return None
     v = _parse_pep440(version_str)
     if v is None:
         return None
+    eco_upper = ecosystem.upper()
+    found_applicable_range = False
     for aff in vuln.get("affected") or []:
-        # Fast path: OSV explicit versions list
-        if version_str in (aff.get("versions") or []):
+        # Fast path: OSV explicit versions list — only when the affected entry's
+        # package ecosystem matches the query, since the list is ecosystem-specific.
+        aff_eco = ((aff.get("package") or {}).get("ecosystem") or "").upper()
+        if aff_eco == eco_upper and version_str in (aff.get("versions") or []):
             return True
         for r in aff.get("ranges") or []:
-            if r.get("type") != "ECOSYSTEM":
+            if r.get("type") != range_type:
                 continue
+            found_applicable_range = True
             events: list[dict[str, Any]] = r.get("events") or []
             current_intro: "_PkgVersion | None" = None
             for ev in events:
@@ -312,12 +339,17 @@ def _version_in_range(version_str: str, vuln: dict[str, Any], ecosystem: str) ->
             # Open range: introduced with no following fixed
             if current_intro is not None and v >= current_intro:
                 return True
-    return False
+    # Return False only if we actually checked applicable ranges and found no match;
+    # None if there were no applicable ranges to check (undetermined).
+    return False if found_applicable_range else None
 
 
 def _first_fix_version(version_str: str, vuln: dict[str, Any], ecosystem: str) -> "str | None":
-    """Smallest fixed version > version_str from any ECOSYSTEM range, or None."""
-    if not _HAVE_PACKAGING or ecosystem.upper() != "PYPI":
+    """Smallest fixed version > version_str from an applicable range, or None."""
+    if not _HAVE_PACKAGING:
+        return None
+    range_type = _applicable_range_type(ecosystem)
+    if range_type is None:
         return None
     v = _parse_pep440(version_str)
     if v is None:
@@ -325,7 +357,7 @@ def _first_fix_version(version_str: str, vuln: dict[str, Any], ecosystem: str) -
     candidates: list[_PkgVersion] = []
     for aff in vuln.get("affected") or []:
         for r in aff.get("ranges") or []:
-            if r.get("type") != "ECOSYSTEM":
+            if r.get("type") != range_type:
                 continue
             for ev in r.get("events") or []:
                 if "fixed" in ev:

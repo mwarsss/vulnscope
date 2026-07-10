@@ -1,0 +1,73 @@
+name: Canary — live endpoint health check
+
+on:
+  schedule:
+    # Every 6 hours. pyyaml==5.3.1 is a fixed known-bad package:
+    # CVE-2020-14343 (CRITICAL, EPSS ~0.92) should always return DENIED.
+    - cron: "0 */6 * * *"
+  workflow_dispatch: {}  # allow manual trigger
+
+jobs:
+  canary:
+    runs-on: ubuntu-latest
+    env:
+      # Set VULNSCOPE_URL as a repository variable in Settings → Variables → Actions.
+      # Example: https://vulnscope-production.up.railway.app
+      VULNSCOPE_URL: ${{ vars.VULNSCOPE_URL }}
+
+    steps:
+      - name: Check VULNSCOPE_URL is configured
+        run: |
+          if [ -z "$VULNSCOPE_URL" ]; then
+            echo "::error::VULNSCOPE_URL repository variable is not set."
+            echo "Go to Settings → Variables → Actions and add VULNSCOPE_URL."
+            exit 1
+          fi
+
+      - name: Call /v1/evaluate (pyyaml==5.3.1, known DENIED)
+        id: probe
+        run: |
+          TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          RESPONSE=$(curl -sf --max-time 15 \
+            "$VULNSCOPE_URL/v1/evaluate?packages=pyyaml==5.3.1&ecosystem=PyPI" \
+            2>&1) || {
+            echo "verdict=ERROR"                    >> "$GITHUB_OUTPUT"
+            echo "queried_at=$TIMESTAMP"            >> "$GITHUB_OUTPUT"
+            echo "error=curl failed: $RESPONSE"     >> "$GITHUB_OUTPUT"
+            exit 0
+          }
+          VERDICT=$(echo "$RESPONSE" | python3 -c \
+            "import json,sys; d=json.load(sys.stdin); print(d['payload']['verdict'])" \
+            2>/dev/null || echo "PARSE_ERROR")
+          QUERIED_AT=$(echo "$RESPONSE" | python3 -c \
+            "import json,sys; d=json.load(sys.stdin); print(d['payload']['queried_at'])" \
+            2>/dev/null || echo "$TIMESTAMP")
+          echo "verdict=$VERDICT"       >> "$GITHUB_OUTPUT"
+          echo "queried_at=$QUERIED_AT" >> "$GITHUB_OUTPUT"
+          echo "raw_response<<EOF"      >> "$GITHUB_OUTPUT"
+          echo "$RESPONSE"              >> "$GITHUB_OUTPUT"
+          echo "EOF"                    >> "$GITHUB_OUTPUT"
+
+      - name: Log result
+        run: |
+          echo "=== VulnScope canary — $(date -u) ==="
+          echo "Endpoint : $VULNSCOPE_URL/v1/evaluate"
+          echo "Package  : pyyaml==5.3.1"
+          echo "Verdict  : ${{ steps.probe.outputs.verdict }}"
+          echo "Queried  : ${{ steps.probe.outputs.queried_at }}"
+          echo ""
+          echo "--- raw response ---"
+          echo '${{ steps.probe.outputs.raw_response }}' \
+            | python3 -m json.tool 2>/dev/null \
+            || echo '${{ steps.probe.outputs.raw_response }}'
+
+      - name: Assert expected verdict
+        run: |
+          VERDICT="${{ steps.probe.outputs.verdict }}"
+          if [ "$VERDICT" != "DENIED" ]; then
+            echo "::error::Expected DENIED for pyyaml==5.3.1 but got: $VERDICT"
+            echo "This may indicate the endpoint is down, the signing key rotated,"
+            echo "or OSV/EPSS data changed in an unexpected way."
+            exit 1
+          fi
+          echo "✓ Verdict is DENIED as expected."

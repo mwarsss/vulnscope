@@ -263,6 +263,36 @@ render deploy
 
 ---
 
+## Why these thresholds
+
+**EPSS percentile > 0.90.**
+EPSS (Exploit Prediction Scoring System) ranks every published CVE by its
+estimated probability of being exploited in the wild within the next 30 days.
+A percentile of 0.90 means the CVE sits in the **top 10% of all CVEs by
+exploitation likelihood** — not that there is a 90% chance it will be exploited.
+At this cut-off, fewer than 1 in 10 CVEs trigger the rule, which keeps the
+false-positive rate (safe packages incorrectly denied) low while still catching
+the CVEs most actively weaponised by attackers.  0.90 is a starting point
+chosen to be conservative without being paranoid; it is a named constant
+(`EPSS_DENY_PERCENTILE` in `main.py`) so operators can tighten or relax it
+without touching business logic.
+
+**CRITICAL / HIGH severity with no fixed version.**
+When a CVE has no fix available yet, there is no upgrade path an agent can
+take — the dependency is unconditionally risky.  CRITICAL and HIGH are the
+two severity bands where the attack impact is severe enough (remote code
+execution, privilege escalation, full data disclosure) to justify blocking
+installation outright.  MEDIUM and LOW vulns without a fix are surfaced in the
+verdict payload for human review but do not trigger automatic denial.  This
+pairing (`severity in deny set AND no fix`) is intentionally conservative:
+once a fix lands, the severity check falls silent and only EPSS can deny the
+package.  Both the severity set and the no-fix requirement are configurable
+constants, not empirically tuned values — operators running VulnScope in a
+lower-risk environment can remove HIGH from the set or disable the severity
+check entirely.
+
+---
+
 ## Known Limitations
 
 **Ecosystem coverage** — Only `PyPI` and `npm` are supported.  Other ecosystems

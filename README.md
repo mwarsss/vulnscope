@@ -263,6 +263,36 @@ render deploy
 
 ---
 
+## Known Limitations
+
+**Ecosystem coverage** — Only `PyPI` and `npm` are supported.  Other ecosystems
+(Maven, RubyGems, Go, Cargo, etc.) are passed through to OSV.dev but the
+server-side version-range check (`_version_in_range`) only activates for PyPI.
+npm packages receive OSV vulnerability data without confirmed in-range filtering.
+
+**Upstream availability and freshness** — Every verdict is a point-in-time
+snapshot assembled from live calls to OSV.dev, EPSS, and the GitHub API.  There
+is no local cache and no fallback store, so a degraded upstream returns whatever
+partial data is available (see *Architecture notes* below for how individual
+failures are handled gracefully).  A verdict that was APPROVED this morning may
+be DENIED by tonight if a new CVE is published or an EPSS score shifts above the
+denial threshold.
+
+**Verdict replay is not a security risk but does go stale** — A signed verdict
+is not an auth token; replaying it cannot grant access to anything.  However,
+because the signature only proves the verdict was genuine *at `queried_at`*, a
+cached APPROVED verdict should not be treated as perpetually valid.  Agents
+should re-query before each install, or at most treat a verdict as fresh for a
+short, bounded window.
+
+**No offline test suite for upstream integrations** — `tests/test_version_range.py`
+and `tests/test_signature.py` run entirely in-process against fixture data and
+Ed25519 primitives.  The OSV, EPSS, and GitHub HTTP calls are exercised only via
+live integration (manual `curl` or a running server).  CI results will vary if
+those services are rate-limited or degraded during a test run.
+
+---
+
 ## Architecture notes
 
 - Every external HTTP call is wrapped in a 5-second timeout (`HTTP_TIMEOUT`)

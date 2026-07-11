@@ -24,11 +24,19 @@ jobs:
             exit 1
           fi
 
+      - name: Wake up service (Render free tier cold-start — up to 60s)
+        run: |
+          echo "Pinging /health to wake the service before the timed probe..."
+          curl -sf --max-time 60 --retry 2 --retry-delay 5 \
+            "$VULNSCOPE_URL/health" || {
+            echo "::warning::Health ping failed — service may be down. Probe will still run."
+          }
+
       - name: Call /v1/evaluate (pyyaml==5.3.1, known DENIED)
         id: probe
         run: |
           TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-          RESPONSE=$(curl -sf --max-time 15 \
+          RESPONSE=$(curl -sf --max-time 30 \
             "$VULNSCOPE_URL/v1/evaluate?packages=pyyaml==5.3.1&ecosystem=PyPI" \
             2>&1) || {
             echo "verdict=ERROR"                    >> "$GITHUB_OUTPUT"
